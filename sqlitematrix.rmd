@@ -15,7 +15,7 @@ library(stringr)
 library(rbenchmark)
 ```
 create the test matrix and connections
-```{r}
+```{r results=FALSE}
 set.seed(1887)
 NROW <- 480
 NCOL <- 250
