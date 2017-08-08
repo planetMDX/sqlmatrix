@@ -1,0 +1,340 @@
+---
+title: "Serialisation vs table approach for implementig matrixes in sqlite"
+output: html_document
+---
+
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+
+```
+load packages
+```{r}
+library(RSQLite)
+library(DBI)
+library(stringr)
+library(rbenchmark)
+```
+create the test matrix and connections
+```{r}
+set.seed(1887)
+NROW <- 480
+NCOL <- 250
+testMatrix <- matrix(round(rnorm(NROW*NCOL),3), nrow=NROW, ncol=NCOL,
+                     dimnames=list(sample(1000, NROW),
+                                   sample(500, NCOL)))
+con = dbConnect(RSQLite::SQLite(), "gep2.db")
+con2 = dbConnect(RSQLite::SQLite(), "gep.db")
+com <- readLines("matrix.sql")[4:length(readLines("matrix.sql"))]
+for ( i in 1:length(com)) {
+  dbExecute(con2, com[i])
+}
+
+dbExecute(con2, 'VACUUM;')
+```
+
+```{r echo=FALSE}
+nnNames <- function(matrix, type=c("row", "column")) {
+    type <- match.arg(type)
+    nameFunc <- ifelse(type=="row", rownames, colnames)
+    nFunc <-  ifelse(type=="row", nrow, ncol)
+    rnames <- do.call(nameFunc, list(matrix))
+    if(is.null(rnames)) {
+        rnames <- rep_len("", do.call(nFunc, list(matrix)))
+    }
+    return(rnames)
+}
+        
+writeMatrixToSqlite <- function(matrix,
+                                con=dbConnect(RSQLite::SQLite(), "gep.db"),
+                                matrixName="myFirstMatrix",
+                                verbose=TRUE) {
+    stopifnot(is.matrix(matrix))
+
+    dbBegin(con)
+    ## insert matrix
+    rs <- dbSendStatement(con, 'INSERT INTO matrix (nrow,ncol,name) values (:nrow, :ncol, :name)')
+    dbBind(rs, param = list(nrow=nrow(matrix), ncol=ncol(matrix), name=matrixName))
+    matInsertSuc <- dbGetRowsAffected(rs)==1
+    dbClearResult(rs)
+    
+    ## what was the last RowID?
+    currMatId <- dbGetQuery(con, "SELECT last_insert_rowid();")[1,1]
+    
+    ## insert row names
+    rs <- dbSendStatement(con, 'INSERT INTO matrix_rownames (matrixId, rowInd, name) values (:matrixId, :rowInd, :name)')
+    rnames <-  nnNames(matrix, type="row")
+    dbBind(rs, param=list(matrixId=rep_len(currMatId, nrow(matrix)),
+                          rowInd=1:nrow(matrix),
+                          name=rnames))
+    rnameInsertSuc <- dbGetRowsAffected(rs)==nrow(matrix)
+    dbClearResult(rs)
+    
+    ## insert column names
+    rs <- dbSendStatement(con, 'INSERT INTO matrix_colnames (matrixId, colInd, name) values (:matrixId, :colInd, :name)')
+    cnames <-  nnNames(matrix, type="column")
+    dbBind(rs, param=list(matrixId=rep_len(currMatId, ncol(matrix)),
+                          colInd=1:ncol(matrix),
+                          name=cnames))
+    cnameInsertSuc <- dbGetRowsAffected(rs)==ncol(matrix)
+    dbClearResult(rs)
+    
+    ## insert values
+    rs <- dbSendStatement(con, 'INSERT INTO matrix_val (matrixId, rowInd, colInd, value) values (:matrixId, :rowInd, :colInd, :value)')
+    rinds <- rep(1:nrow(matrix), ncol(matrix))
+    cinds <- rep(1:ncol(matrix), each=nrow(matrix))
+    dbBind(rs, param=list(matrixId=rep_len(currMatId, nrow(matrix)*ncol(matrix)),
+                          rowInd=rinds,
+                          colInd=cinds,
+                          value=as.vector(matrix)))
+
+    dbGetRowsAffected(rs)
+    valInsertSuc <- dbGetRowsAffected(rs)==nrow(matrix)*ncol(matrix)
+    dbClearResult(rs)
+
+    if(!matInsertSuc) {
+        message("Matrix insert not successful")
+        dbRollback(con)
+    } else if (!cnameInsertSuc) {
+        message("Column name insert not successful")
+        dbRollback(con)
+    } else if (!rnameInsertSuc) {
+        message("Row name insert not successful")
+        dbRollback(con)
+    } else if (!valInsertSuc) {
+        message("Value insert not successful")
+        dbRollback(con)
+    } else {
+        dbCommit(con)
+    }
+        
+    if(verbose)
+        message("Matrix saved with ID=", currMatId)
+    return(currMatId)
+}
+
+readMatrixFromSqlite <- function(id,
+                                  con=dbConnect(RSQLite::SQLite(), "gep.db"),
+                                  verbose=TRUE) {
+
+    rs <- dbSendQuery(con,
+                      "SELECT id FROM matrix WHERE id = :id;")
+    dbBind(rs, param=list(id=id))
+    idExist <- nrow(dbFetch(rs))==1
+    dbClearResult(rs)
+    
+    if(!idExist) {
+        warning("Matrix ID ", id, " does not exist: returning NULL")
+        return(NULL)
+    }
+    
+    rs <- dbSendQuery(con,
+                      "SELECT nrow,ncol,name,desc FROM matrix WHERE id = :id;")
+    dbBind(rs, param=list(id=id))
+    matInfo <- dbFetch(rs)
+    dbClearResult(rs)
+
+    ## row names
+    rs <- dbSendQuery(con,
+                      "SELECT name, desc FROM matrix_rownames WHERE matrixId = :id;")
+    dbBind(rs, param=list(id=id))
+    rnames <- dbFetch(rs)
+    dbClearResult(rs)
+
+    ## column names
+    rs <- dbSendQuery(con,
+                      "SELECT name, desc FROM matrix_colnames WHERE matrixId = :id;")
+    dbBind(rs, param=list(id=id))
+    cnames <- dbFetch(rs)
+    dbClearResult(rs)
+
+    ## value
+    rs <- dbSendQuery(con,
+                      "SELECT value FROM matrix_val WHERE matrixId = :id;")
+    dbBind(rs, param=list(id=id))
+    vals <- dbFetch(rs)[,1L]
+    dbClearResult(rs)
+    
+    if(length(vals) != matInfo$nrow*matInfo$ncol) {
+        stop("Length of value (", length(vals), ") ",
+             "not consistent with dim (",
+             matInfo$nrow, "x",matInfo$ncol, ")")
+    }
+    mat <-  matrix(vals, nrow=matInfo$nrow, ncol=matInfo$ncol,
+                   byrow=FALSE, 
+                   dimnames=list(rnames$name, cnames$name))
+    return(mat)
+                       
+}
+writeMatrixtoTable <- function(matrix, conn, matrixname) {
+  stopifnot(is.matrix(matrix))
+  if (is.null(conn)) {
+    con = dbConnect(RSQLite::SQLite(), "gep2.db")
+  }
+  else {
+    con = dbConnect(RSQLite::SQLite(), conn)
+  }
+  if (is.null(matrixname)) {
+    matrixname = "matrixz"
+  }
+  dbBegin(con)
+  df <- as.data.frame(matrix)
+  dbWriteTable(con, matrixname, df, overwrite = TRUE, row.names = TRUE)
+  dbCommit(con)
+  dbDisconnect(con)
+  return(matrixname)
+}
+readtabletomatrix <- function(table, conn) {
+  if (is.null(conn)) {
+    con = dbConnect(RSQLite::SQLite(), "gep2.db")
+  }
+  else {
+    con = dbConnect(RSQLite::SQLite(), conn)
+  }
+  dbBegin(con)
+  
+  df <- dbReadTable(con, table, row.names = TRUE)
+  stna <- str_c("V", as.character(1:ncol(df)))
+  if (all(stna == colnames(df))) {
+    matrix <- as.matrix(df)
+    colnames(matrix)<- NULL
+  }
+  else {
+    matrix <- as.matrix(df)
+  }
+  
+  if (all(str_detect(colnames(matrix), "X"))) {
+    colnames(matrix)<- str_replace(colnames(matrix), "X", "")
+  }
+  dbDisconnect(con)
+  return(matrix)
+}
+Sread1 <- function(id, conn, col, row) {
+  con <- dbConnect(RSQLite::SQLite(), conn)
+  rs <- dbSendStatement(con, 'SELECT value FROM matrix_val WHERE (matrixId = :id AND rowInd = :row AND colInd = :col);')
+  dbBind(rs, params = list(id = id, row = row, col = col))
+  val <- dbFetch(rs)
+  dbClearResult(rs)
+  dbDisconnect(con)
+  return(val)
+}
+SreadC <- function(id, conn, col) {
+  con <- dbConnect(RSQLite::SQLite(), conn)
+  rs <- dbSendStatement(con, 'SELECT value FROM matrix_val WHERE (matrixId = :id AND colInd = :col);')
+  dbBind(rs, params = list(id = id, col = col))
+  val <- dbFetch(rs)
+  dbClearResult(rs)
+  dbDisconnect(con)
+  return(val)
+}
+SreadR <- function(id, conn, row) {
+  con <- dbConnect(RSQLite::SQLite(), conn)
+  rs <- dbSendStatement(con, 'SELECT value FROM matrix_val WHERE (matrixId = :id AND rowInd = :row);')
+  dbBind(rs, params = list(id = id, row = row))
+  val <- dbFetch(rs)
+  dbClearResult(rs)
+  dbDisconnect(con)
+  return(val)
+}
+Tread1nu <- function(name, conn, col, row) {
+  con <- dbConnect(RSQLite::SQLite(), conn)
+  if (!is.na(as.numeric(col))) {
+    col <- str_c("\"", col, "\"", sep = "")
+  }
+  com <- str_c('SELECT ', col,  ' FROM ', name, ' WHERE ROWID = ', row, ' ;', sep = "")
+  rs <- dbSendStatement(con, com)
+  val <- dbFetch(rs)
+  dbClearResult(rs)
+  dbDisconnect(con)
+  return(val)
+}
+Tread1na <- function(name, conn, col, row) {
+  con <- dbConnect(RSQLite::SQLite(), conn)
+  if (!is.na(as.numeric(col))) {
+    col <- str_c("\"", col, "\"", sep = "")
+  }
+  com <- str_c('SELECT ', col, ' FROM ', name, ' WHERE row_names = ', row, ' ;', sep = "")
+  rs <- dbSendStatement(con, com)
+  val <- dbFetch(rs)
+  dbClearResult(rs)
+  dbDisconnect(con)
+  return(val)
+}
+TreadC <- function(name, conn, col) {
+  con <- dbConnect(RSQLite::SQLite(), conn)
+  if (!is.na(as.numeric(col))) {
+    col <- str_c("\"", col, "\"", sep = "")
+  }
+  com <- str_c('SELECT ', col, ' FROM ', name, ' ;', sep = "")
+  rs <- dbSendStatement(con, com)
+  val <- dbFetch(rs)
+  dbClearResult(rs)
+  dbDisconnect(con)
+  return(val)
+}
+TreadRnu <- function(name, conn, row) {
+  con <- dbConnect(RSQLite::SQLite(), conn)
+  com <- str_c('SELECT * FROM ', name, ' WHERE ROWID = ', row, ' ;', sep = "")
+  rs <- dbSendStatement(con, com)
+  val <- dbFetch(rs)
+  dbClearResult(rs)
+  dbDisconnect(con)
+  valf <- data.frame(val[1, 2:ncol(val)], row.names = val[1, 1])
+  return(valf)
+}
+TreadRna <- function(name, conn, row) {
+  con <- dbConnect(RSQLite::SQLite(), conn)
+  com <- str_c('SELECT * FROM ', name, ' WHERE row_names = ', row, ' ;', sep = "")
+  rs <- dbSendStatement(con, com)
+  val <- dbFetch(rs)
+  dbClearResult(rs)
+  dbDisconnect(con)
+  valf <- data.frame(val[1, 2:ncol(val)], row.names = val[1, 1])
+  return(valf)
+}
+```
+
+Benchmark for the speed of writing the matrix, reading the complete matrix, reading one field of the matrix, reading one column of the matrix and reading one row of the matrix to and from sqlite in the serialisation approach. (repeated a 100 times)
+```{r warning=FALSE, message = FALSE}
+
+Sall <- benchmark(SWrite=writeMatrixToSqlite(testMatrix), 
+                  SARead= (valSA <- readMatrixFromSqlite(1)), 
+                  S1Read=(valS1 <- Sread1(1, "gep.db", col=1, row=100)),
+                  SCRead=(valSC <- SreadC(1, "gep.db", 5)),
+                  SRRread=(valSR <- SreadR(1, "gep.db", 15)),
+                  order = NULL
+)
+```
+Benchmark for the speed of writing the matrix, reading the complete matrix, reading one field of the matrix, reading one column of the matrix and reading one row of the matrix to and from sqlite in the table approach. (repeated a 100 times)
+```{r warning=FALSE}
+Tall <- benchmark(Twrite=writeMatrixtoTable(testMatrix, "gep2.db", "matrixz"),
+                  TARead=(valTA <- readtabletomatrix("matrixz", "gep2.db")),
+                  T1Read=(valT1 <- Tread1nu("matrixz", "gep2.db", colnames(testMatrix)[1], "100")),
+                  TCRead=(valTC <- TreadC("matrixz", "gep2.db", colnames(testMatrix)[5])), 
+                  TRRead=(valTR <- TreadRnu("matrixz", "gep2.db", "15")),
+                  order = NULL
+)
+```
+Checking if the different approaches return different things.
+```{r echo = FALSE}
+if (!(all(valSA == valTA))) {
+  warning("valSA != valTA")
+}
+if (!(all(valS1 == valT1))) {
+  warning("valS1 != valT1")
+}
+if (!(all(valSC == valTC))) {
+  warning("valSC != valTC")
+}
+if (!(all(as.numeric(valTR) == valSR[, 1]))) {
+  warning("valSR != valTR")
+}
+
+```
+
+
+barplot
+```{r plot}
+barplot(c(Sall[1, 3], Tall[1, 3], Sall[2, 3], Tall[2, 3], Sall[3, 3], Tall[3, 3], Sall[4, 3], Tall[4, 3], Sall[5, 3], Tall[5, 3]), names.arg = c("SWrite", "TWrite", "SARead", "TARead", "S1Read", "T1Read", "SCRead", "TCRead", "SRRead", "TRRead"), las = 2, ylab = "time")
+```
+
+I have experienced slowdowns with the serialisation approach if the file the matrices were saved in was containing many matrices
