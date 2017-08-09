@@ -1,0 +1,6 @@
+"test" "replications" "elapsed" "relative" "user.self" "sys.self" "user.child" "sys.child"
+"1" "SWrite" 100 44.484 16.661 39.28 3.756 0 0
+"2" "SARead" 100 8.217 3.078 7.524 0.588 0 0
+"3" "S1Read" 100 2.67 1 2.212 0.436 0 0
+"4" "SCRead" 100 2.706 1.013 2.248 0.436 0 0
+"5" "SRRread" 100 2.67899999999999 1.003 2.252 0.399999999999999 0 0

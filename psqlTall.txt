@@ -1,0 +1,6 @@
+"test" "replications" "elapsed" "relative" "user.self" "sys.self" "user.child" "sys.child"
+"1" "pTwrite <- wMpsT(testMatrix, name = \"matrixz\")" 100 19.0060000000003 18.506 12.596 0.652 0 0
+"2" "pTARead <- (valpTA <- rMpsT(name = \"matrixz\"))" 100 16.2579999999998 15.831 4.752 0.332000000000001 0 0
+"3" "pT1Read <- (valpT1 <- pTread1na(\"matrixz\", col = colnames(testMatrix)[5], row = rownames(testMatrix)[15]))" 100 1.02700000000004 1 0.387999999999998 0.0519999999999996 0 0
+"4" "pTCRead <- (valpTC <- pTreadC(\"matrixz\", col = colnames(testMatrix)[30]))" 100 1.15399999999954 1.124 0.407999999999994 0.0720000000000001 0 0
+"5" "pTRRead <- (valpTR <- pTreadRna(\"matrixz\", row = rownames(testMatrix)[12]))" 100 5.93900000000031 5.783 0.955999999999996 0.472 0 0

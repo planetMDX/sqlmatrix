@@ -1,0 +1,5 @@
+"test" "replications" "elapsed" "relative" "user.self" "sys.self" "user.child" "sys.child"
+"1" "{
+    drv <- dbDriver(\"PostgreSQL\")
+    dbUnloadDriver(drv)
+}" 100 0.0459999999998217 1 0.0480000000000018 0 0 0
