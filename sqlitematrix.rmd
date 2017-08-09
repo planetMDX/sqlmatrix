@@ -21,7 +21,9 @@ library(RSQLite)
 library(DBI)
 library(stringr)
 library(rbenchmark)
+library(RColorBrewer)
 ```
+
 create the test matrix and connections
 ```{r results=FALSE}
 set.seed(1887)
@@ -347,7 +349,14 @@ if (!(all(as.numeric(valTR) == valSR[, 1]))) {
 
 
 ```{r timePlot, echo = FALSE, fig.cap = "barplot of the benchmarks"}
-barplot(c(Sall[1, 3], Tall[1, 3], Sall[2, 3], Tall[2, 3], Sall[3, 3], Tall[3, 3], Sall[4, 3], Tall[4, 3], Sall[5, 3], Tall[5, 3]), names.arg = c("SWrite", "TWrite", "SARead", "TARead", "S1Read", "T1Read", "SCRead", "TCRead", "SRRead", "TRRead"), las = 2, ylab = "time")
+tnames <- c("SWrite", "TWrite", "SARead", "TARead", "S1Read", "T1Read", "SCRead", "TCRead", "SRRead", "TRRead")
+tcol <- ifelse(grepl("^S", tnames), "lightgray", "black")
+ttype <- factor(substr(tnames, 2, nchar(tnames)))
+tborder <- brewer.pal(length(levels(ttype)), "Set1")[as.integer(ttype)]
+op <- par(lwd=4); barplot(c(Sall[1, 3], Tall[1, 3], Sall[2, 3], Tall[2, 3], Sall[3, 3], Tall[3, 3], Sall[4, 3], Tall[4, 3], Sall[5, 3], Tall[5, 3]), 
+        border=tborder, 
+        xlab="Task", ylab="Time [s]",
+        names.arg = tnames, col=tcol, las = 2); par(op)
 ```
 
 # Notes
