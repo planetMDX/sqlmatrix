@@ -1,0 +1,81 @@
+---
+title: "Home"
+output: html_document
+
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r }
+connections <- read.table("https://raw.githubusercontent.com/planetMDX/sqlmatrix/master/connections.txt")
+driver <- read.table("https://raw.githubusercontent.com/planetMDX/sqlmatrix/master/driver.txt")
+Sall <- read.table("https://raw.githubusercontent.com/planetMDX/sqlmatrix/master/Sall.txt")
+Tall <- read.table("https://raw.githubusercontent.com/planetMDX/sqlmatrix/master/Tall.txt")
+Tstress <- read.table("https://raw.githubusercontent.com/planetMDX/sqlmatrix/master/stress.txt")
+Sstress <- read.table("https://raw.githubusercontent.com/planetMDX/sqlmatrix/master/sstress.txt")
+mSall <- read.table("https://raw.githubusercontent.com/planetMDX/sqlmatrix/master/mSall.txt")
+mTall <- read.table("https://raw.githubusercontent.com/planetMDX/sqlmatrix/master/mTall.txt")
+mTstress <- read.table("https://raw.githubusercontent.com/planetMDX/sqlmatrix/master/mstress.txt")
+mSstress <- read.table("https://raw.githubusercontent.com/planetMDX/sqlmatrix/master/msstress.txt")
+psqlTall <- read.table("https://raw.githubusercontent.com/planetMDX/sqlmatrix/master/psqlTall.txt")
+psqlTstress <- read.table("https://raw.githubusercontent.com/planetMDX/sqlmatrix/master/psqlTstress.txt")
+mpsqlTall <- read.table("https://raw.githubusercontent.com/planetMDX/sqlmatrix/master/mpsqlTall.txt")
+mpsqlTstress <- read.table("https://raw.githubusercontent.com/planetMDX/sqlmatrix/master/mpsqlTstress.txt")
+```
+
+Comparison between diiferent approaches of implemetation of matrices in a database: The serialization approach in SQLite, the read and write table from DBI approach in SQLite and the read and write table from DBI approach in PostgreSQL.
+
+```{r}
+barplot(Sall[, 3], names.arg = c("Write", "Read\neverything", "Read\n1 Field", "Read\n1 Column", "Read\n1 ROW"), col = rep("blue", 5), legend.text =  "SQLite Serialization\npsql Table\nSQLite Table", args.legend = list(x = "topright", legend = c("SQLite Serialization", "\npsql Table", "\nSQLite Table"), fill = c("blue", "red", "green")), main = "Comparison between the different approaches \nwith an almost empty database")
+barplot(psqlTall[, 3], col = rep("red", 5), add = TRUE)
+barplot(c(0, Sall[2, 3], rep(0, 2), Sall[5, 3]), col = rep("blue", 5), add = TRUE)
+barplot(Tall[, 3], ylab = "time in s", col = rep("green", 5), add = TRUE)
+
+```
+```{r}
+barplot(Sstress[, 3], names.arg = c("Write", "Read\neverything", "Read\n1 Field", "Read\n1 Column", "Read\n1 ROW"), col = rep("blue", 5), legend.text =  "SQLite Serialization\npsql Table\nSQLite Table", args.legend = list(x = "topright", legend = c("SQLite Serialization", "\npsql Table", "\nSQLite Table"), fill = c("blue", "red", "green")), main = "How the diferent approaches fare with a database containing a \n1000 matrices of 120000 elements each")
+
+
+barplot(Tstress[, 3], ylab = "time in s", col = rep("green", 5), add = TRUE)
+barplot(c(0,Sstress[2, 5], rep(0, 3)), col = rep("blue", 5), add = TRUE)
+barplot(psqlTstress[, 3], col = rep("red", 5), add = TRUE)
+```
+```{r}
+barplot(psqlTstress[, 3], col = rep("blue", 5), names.arg = c("Write", "Read\neverything", "Read\n1 Field", "Read\n1 Column", "Read\n1 ROW"), ylab = "time in s",  legend.text =  "psql Table with a heavily used database\npsql Table with a new database", args.legend = list(x = "topright", legend = c("psql Table with a heavily used database", "\npsql Table with a new database"), fill = c("blue", "red")), main = "PostgreSQL with a small and a bi database")
+barplot(psqlTall[, 3], col = rep("red", 5), add= TRUE)
+```
+
+```{r}
+barplot(sort(connections[2:5, 3]), names.arg = c("small \nSQLite \ndb", "small \npsql \ndb", "large \npsql \ndb", "large \nSQLite \ndb"), las = 2, ylab = "time/\nhundred connects and disconnects", xlab = "connections", main = "Time per 100 connects and disconnects for SQLite and PostgreSQL")
+```
+As one can see, SQLite is very time time-consumming when frequently opening and closing a connection to a big database, meanwhile PostgreSQL doesn't change.
+```{r}
+barplot(mSstress[, 3], col = rep("blue", 5), names.arg = c("Write", "Read\neverything", "Read\n1 Field", "Read\n1 Column", "Read\n1 ROW"), ylab = "time in s",  legend.text =  "psql Table with a heavily used database\npsql Table with a new database\nSQLite serialization fresh db\nSQLite serialization used db\nSQLite table fresh db\nSQLite table used db", args.legend = list(x = "topright", legend = c("psql Table with a heavily used database", "\npsql Table with a new database", "\nSQLite serialization fresh db", "\nSQLite serialization used db", "\nSQLite table fresh db", "\nSQLite table used db"), fill = c("brown", "red", "yellow", "blue", "green", "purple")), main = "how the approaches do \nwhen the connection isn't closed and opened every time")
+barplot(mSall[, 3], col = rep("yellow", 5), add= TRUE)
+barplot(mpsqlTall[, 3], col = rep("red", 5), add= TRUE)
+barplot(mpsqlTstress[, 3], col = rep("brown", 5), add= TRUE)
+barplot(mTstress[, 3], col = rep("purple", 5), add= TRUE)
+barplot(mTall[, 3], col = rep("green", 5), add= TRUE)
+
+
+barplot(c(0, mpsqlTall[2, 3]), col = rep("red", 2), add = TRUE)
+barplot(c(0, mpsqlTstress[2, 3]), col = rep("brown", 2), add = TRUE)
+barplot(c(0, mSall[2, 3]), col = rep("yellow", 2), add = TRUE)
+barplot(c(0, mSstress[2, 3]), col = rep("blue", 2), add = TRUE)
+
+barplot(c(0, mTall[2, 3]), col = rep("green", 2), add= TRUE)
+barplot(c(rep(0 ,4), mpsqlTall[5, 3]), col = rep("red", 5), add = TRUE)
+barplot(c(rep(0 ,4), mSall[5, 3]), col = rep("yellow", 5), add = TRUE)
+barplot(c(rep(0 ,4), mSstress[5, 3]), col = rep("blue", 5), add = TRUE)
+barplot(c(rep(0 ,4), mTstress[5, 3]), col = rep("purple", 5), add = TRUE)
+
+
+
+
+```
+If the connection to the database doesn't get opened and closed every time, the difference between a big and a small database becom smaller and the difference between PostgreSQL and SQLite also becomes smaller.
+
