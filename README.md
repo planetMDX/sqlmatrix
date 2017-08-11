@@ -1,37 +1,14 @@
-## Welcome to GitHub Pages
+# How different approaches for matrices in databases fare in dependency of the databasesize
 
-You can use the [editor on GitHub](https://github.com/planetMDX/sqlmatrix/edit/master/README.md) to maintain and preview the content for your website in Markdown files.
+Comparison between diiferent approaches of implemetation of matrices in a database: The serialization approach in SQLite, the read and write table from DBI approach in SQLite and the read and write table from DBI approach in PostgreSQL.
+![barplot1](https://raw.githubusercontent.com/planetMDX/sqlmatrix/gh-pages/website/index_files/figure-html/unnamed-chunk-2-1.png)
+![barplot2](https://raw.githubusercontent.com/planetMDX/sqlmatrix/gh-pages/website/index_files/figure-html/unnamed-chunk-3-1.png)
+One can see, that both approaches, that aren't over PostgreSQL, suffer greatly from a big database.
+Meanwhile PostgreSQL
+![barplot3](https://raw.githubusercontent.com/planetMDX/sqlmatrix/gh-pages/website/index_files/figure-html/unnamed-chunk-4-1.png)
+isn't affected by that.
+![barplot4](https://raw.githubusercontent.com/planetMDX/sqlmatrix/gh-pages/website/index_files/figure-html/unnamed-chunk-5-1.png)
+This is a close look on the connection times for the SQLite and PostgreSQL.
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
-
-### Markdown
-
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
-
-```markdown
-Syntax highlighted code block
-
-# Header 1
-## Header 2
-### Header 3
-
-- Bulleted
-- List
-
-1. Numbered
-2. List
-
-**Bold** and _Italic_ and `Code` text
-
-[Link](url) and ![Image](src)
-```
-
-For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
-
-### Jekyll Themes
-
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/planetMDX/sqlmatrix/settings). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
-
-### Support or Contact
-
-Having trouble with Pages? Check out our [documentation](https://help.github.com/categories/github-pages-basics/) or [contact support](https://github.com/contact) and we’ll help you sort it out.
+![barplot5](https://raw.githubusercontent.com/planetMDX/sqlmatrix/gh-pages/website/index_files/figure-html/unnamed-chunk-6-1.png)
+If the connection to the database doesn't get opened and closed every time, the difference between a big and a small database becom smaller and the difference between PostgreSQL and SQLite also becomes smaller.
